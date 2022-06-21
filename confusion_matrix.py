@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 
 def box_iou_calc(boxes1, boxes2):
@@ -47,6 +48,10 @@ class ConfusionMatrix:
         Returns:
             None, updates confusion matrix accordingly
         """
+        
+        nms_index = self.nms(torch.tensor(detections[:, :4]), torch.tensor(detections[:, 4]), self.IOU_THRESHOLD)
+        detections = detections[nms_index, :]
+        
         gt_classes = labels[:, 0].astype(np.int16)
 
         try:
@@ -67,14 +72,7 @@ class ConfusionMatrix:
                        for i in range(want_idx[0].shape[0])]
 
         all_matches = np.array(all_matches)
-        if all_matches.shape[0] > 0:  # if there is match
-            all_matches = all_matches[all_matches[:, 2].argsort()[::-1]]
-
-            all_matches = all_matches[np.unique(all_matches[:, 1], return_index=True)[1]]
-
-            all_matches = all_matches[all_matches[:, 2].argsort()[::-1]]
-
-            all_matches = all_matches[np.unique(all_matches[:, 0], return_index=True)[1]]
+        
 
         for i, label in enumerate(labels):
             gt_class = gt_classes[i]
@@ -95,3 +93,30 @@ class ConfusionMatrix:
     def print_matrix(self):
         for i in range(self.num_classes + 1):
             print(' '.join(map(str, self.matrix[i])))
+    
+    def nms(self, boxes, scores, iou_threshold):
+
+        """
+        Performs non-maximum suppression (NMS) on the boxes according
+        to their intersection-over-union (IoU).
+        NMS iteratively removes lower scoring boxes which have an
+        IoU greater than iou_threshold with another (higher scoring)
+        box.
+        Parameters
+        ----------
+        boxes : Tensor[N, 4])
+            boxes to perform NMS on. They
+            are expected to be in (x1, y1, x2, y2) format
+        scores : Tensor[N]
+            scores for each one of the boxes
+        iou_threshold : float
+            discards all overlapping
+            boxes with IoU > iou_threshold
+        Returns
+        -------
+        keep : Tensor
+            int64 tensor with the indices
+            of the elements that have been kept
+            by NMS, sorted in decreasing order of scores
+        """
+        return torch.ops.torchvision.nms(boxes, scores, iou_threshold)
